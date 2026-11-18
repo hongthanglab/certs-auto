@@ -1,0 +1,106 @@
+---
+- name: "NGINX | Ensure SSL directory and backup directory exist"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+  loop:
+    - "{{ nginx_cert_dir }}"
+    - "{{ nginx_cert_dir }}/backups"
+
+- name: "NGINX | Check if existing certificate exists for backup"
+  ansible.builtin.stat:
+    path: "{{ nginx_cert_dir }}/{{ cert_domain }}.crt"
+  register: existing_cert
+
+- name: "NGINX | Backup current certificate and key"
+  when: existing_cert.stat.exists
+  block:
+    - name: "NGINX | Create timestamped backup folder"
+      ansible.builtin.file:
+        path: "{{ nginx_cert_dir }}/backups/{{ cert_domain }}_{{ ansible_date_time.epoch }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      register: backup_dir
+
+    - name: "NGINX | Copy active cert and key to backup directory"
+      ansible.builtin.copy:
+        src: "{{ nginx_cert_dir }}/{{ item }}"
+        dest: "{{ backup_dir.path }}/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      loop:
+        - "{{ cert_domain }}.crt"
+        - "{{ cert_domain }}.key"
+      no_log: true
+
+- name: "NGINX | Deploy new certificate and private key with rollback guard"
+  block:
+    - name: "NGINX | Write new certificate file (.crt)"
+      ansible.builtin.copy:
+        content: "{{ cert_content }}"
+        dest: "{{ nginx_cert_dir }}/{{ cert_domain }}.crt"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: "NGINX | Write new private key file (.key)"
+      ansible.builtin.copy:
+        content: "{{ key_content }}"
+        dest: "{{ nginx_cert_dir }}/{{ cert_domain }}.key"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: "NGINX | Validate Nginx configuration syntax"
+      ansible.builtin.command:
+        cmd: nginx -t
+      register: nginx_test
+      changed_when: false
+
+    - name: "NGINX | Reload Nginx service (zero-downtime)"
+      ansible.builtin.systemd:
+        name: "{{ nginx_service_name }}"
+        state: reloaded
+
+    - name: "NGINX | Verify Nginx is active"
+      ansible.builtin.systemd:
+        name: "{{ nginx_service_name }}"
+        state: started
+      register: nginx_status
+
+  rescue:
+    - name: "NGINX ROLLBACK | Alert on configuration or reload failure"
+      ansible.builtin.debug:
+        msg: "CRITICAL: Nginx test/reload failed! Initiating rollback to previous cert..."
+
+    - name: "NGINX ROLLBACK | Restore backup files if backup exists"
+      when: existing_cert.stat.exists and backup_dir is defined
+      ansible.builtin.copy:
+        src: "{{ backup_dir.path }}/{{ item }}"
+        dest: "{{ nginx_cert_dir }}/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      loop:
+        - "{{ cert_domain }}.crt"
+        - "{{ cert_domain }}.key"
+      no_log: true
+
+    - name: "NGINX ROLLBACK | Reload Nginx with restored certificate"
+      when: existing_cert.stat.exists and backup_dir is defined
+      ansible.builtin.systemd:
+        name: "{{ nginx_service_name }}"
+        state: reloaded
+
+    - name: "NGINX ROLLBACK | Fail the task with diagnostic error"
+      ansible.builtin.fail:
+        msg: "Nginx certificate deployment failed and was rolled back. Error: {{ nginx_test.stderr | default('Service reload failure') }}"

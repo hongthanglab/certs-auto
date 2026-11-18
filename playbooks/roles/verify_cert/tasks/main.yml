@@ -1,0 +1,22 @@
+---
+- name: "VERIFY | Probe live TLS handshake on port 443 via OpenSSL"
+  ansible.builtin.shell: |
+    echo | openssl s_client -connect {{ ansible_host }}:443 -servername {{ cert_domain }} 2>/dev/null | openssl x509 -noout -dates -serial -subject
+  args:
+    executable: /bin/bash
+  register: live_cert_probe
+  changed_when: false
+  failed_when: false
+
+- name: "VERIFY | Check live probe result"
+  ansible.builtin.debug:
+    msg:
+      - "Host: {{ inventory_hostname }} ({{ ansible_host }})"
+      - "Certificate Details from live port 443:"
+      - "{{ live_cert_probe.stdout_lines }}"
+  when: live_cert_probe.rc == 0
+
+- name: "VERIFY | Warn if port 443 handshake was unreachable"
+  ansible.builtin.debug:
+    msg: "Notice: Port 443 not directly accessible from this host or service not listening on public port. Check local service status."
+  when: live_cert_probe.rc != 0

@@ -1,0 +1,6 @@
+---
+- name: "K8S [{{ cluster.name }}] | Deploy TLS Secret to each target namespace"
+  ansible.builtin.include_tasks: apply_namespace.yml
+  loop: "{{ cluster.target_namespaces }}"
+  loop_control:
+    loop_var: target_namespace

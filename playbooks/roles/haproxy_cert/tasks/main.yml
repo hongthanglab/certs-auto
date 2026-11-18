@@ -1,0 +1,91 @@
+---
+- name: "HAPROXY | Ensure SSL directory and backup directory exist"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+  loop:
+    - "{{ haproxy_cert_dir }}"
+    - "{{ haproxy_cert_dir }}/backups"
+
+- name: "HAPROXY | Check if existing PEM bundle exists"
+  ansible.builtin.stat:
+    path: "{{ haproxy_cert_dir }}/{{ cert_domain }}.pem"
+  register: existing_haproxy_pem
+
+- name: "HAPROXY | Backup current PEM bundle"
+  when: existing_haproxy_pem.stat.exists
+  block:
+    - name: "HAPROXY | Create timestamped backup directory"
+      ansible.builtin.file:
+        path: "{{ haproxy_cert_dir }}/backups/{{ cert_domain }}_{{ ansible_date_time.epoch }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700'
+      register: haproxy_backup_dir
+
+    - name: "HAPROXY | Copy active bundle to backup"
+      ansible.builtin.copy:
+        src: "{{ haproxy_cert_dir }}/{{ cert_domain }}.pem"
+        dest: "{{ haproxy_backup_dir.path }}/{{ cert_domain }}.pem"
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      no_log: true
+
+- name: "HAPROXY | Deploy combined PEM bundle and reload"
+  block:
+    - name: "HAPROXY | Assemble and write combined .pem bundle (cert + private_key)"
+      ansible.builtin.copy:
+        content: "{{ cert_content }}\n{{ key_content }}\n"
+        dest: "{{ haproxy_cert_dir }}/{{ cert_domain }}.pem"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+
+    - name: "HAPROXY | Validate HAProxy configuration syntax"
+      ansible.builtin.command:
+        cmd: haproxy -c -f /etc/haproxy/haproxy.cfg
+      register: haproxy_test
+      changed_when: false
+
+    - name: "HAPROXY | Reload HAProxy service (zero-downtime)"
+      ansible.builtin.systemd:
+        name: "{{ haproxy_service_name }}"
+        state: reloaded
+
+    - name: "HAPROXY | Verify HAProxy service is active"
+      ansible.builtin.systemd:
+        name: "{{ haproxy_service_name }}"
+        state: started
+
+  rescue:
+    - name: "HAPROXY ROLLBACK | Alert on configuration or reload failure"
+      ansible.builtin.debug:
+        msg: "CRITICAL: HAProxy test/reload failed! Initiating rollback to previous PEM bundle..."
+
+    - name: "HAPROXY ROLLBACK | Restore backup bundle"
+      when: existing_haproxy_pem.stat.exists and haproxy_backup_dir is defined
+      ansible.builtin.copy:
+        src: "{{ haproxy_backup_dir.path }}/{{ cert_domain }}.pem"
+        dest: "{{ haproxy_cert_dir }}/{{ cert_domain }}.pem"
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      no_log: true
+
+    - name: "HAPROXY ROLLBACK | Reload HAProxy with restored bundle"
+      when: existing_haproxy_pem.stat.exists and haproxy_backup_dir is defined
+      ansible.builtin.systemd:
+        name: "{{ haproxy_service_name }}"
+        state: reloaded
+
+    - name: "HAPROXY ROLLBACK | Fail the task with diagnostic error"
+      ansible.builtin.fail:
+        msg: "HAProxy certificate deployment failed and was rolled back. Error: {{ haproxy_test.stderr | default('Service reload failure') }}"
