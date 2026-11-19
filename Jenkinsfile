@@ -74,7 +74,7 @@ pipeline {
                                 --header "X-Vault-Token: \${VAULT_TOKEN}" \
                                 "${env.VAULT_ADDR}/v1/secret/certs/${params.CERT_DOMAIN}" > ${TEMP_CERT_DIR}/vault_response.json
 
-                            # Extract certificate and private key using python/jq safely
+                            # Extract certificate and private key using python safely
                             python3 -c "
 import json, sys
 
@@ -183,14 +183,13 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
                     echo "Deploying via Ansible: Inventory=${inventoryFile}, Tags=${ansibleTags}"
 
                     sshagent([env.SSH_CREDENTIAL_ID]) {
-                        // Pass cert content safely without leaking private key into build log
+                        // Pass paths to files securely; Ansible loads them into memory via lookup plugin
                         sh """
-                            set +x
                             ansible-playbook -i ${inventoryFile} playbooks/deploy_certs.yml \
                                 --tags "${ansibleTags}" \
                                 --extra-vars "cert_domain=${params.CERT_DOMAIN}" \
-                                --extra-vars "cert_content=\\"$(cat ${TEMP_CERT_DIR}/cert.crt)\\"" \
-                                --extra-vars "key_content=\\"$(cat ${TEMP_CERT_DIR}/privkey.key)\\""
+                                --extra-vars "cert_file_path=${TEMP_CERT_DIR}/cert.crt" \
+                                --extra-vars "key_file_path=${TEMP_CERT_DIR}/privkey.key"
                         """
                     }
                 }

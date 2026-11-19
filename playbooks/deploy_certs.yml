@@ -4,6 +4,18 @@
 # Architecture: DevSecOps Zero-Trust & Defense-in-Depth
 # ==============================================================================
 
+- name: "INIT | Load Certificate & Key from Jenkins Agent"
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: "Load certificate data securely from local files into memory"
+      ansible.builtin.set_fact:
+        cert_content: "{{ lookup('ansible.builtin.file', cert_file_path) }}"
+        key_content: "{{ lookup('ansible.builtin.file', key_file_path) }}"
+      no_log: true
+  tags:
+    - always
+
 - name: "DEPLOY | Distribute SSL/TLS to Nginx Web Servers"
   hosts: nginx_servers
   gather_facts: true

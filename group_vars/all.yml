@@ -1,0 +1,5 @@
+---
+# Global variables for all inventory hosts
+# Load certificate and private key securely from local files on the Ansible control node (Jenkins runner)
+cert_content: "{{ lookup('ansible.builtin.file', cert_file_path) if (cert_file_path is defined and cert_file_path | length > 0) else '' }}"
+key_content: "{{ lookup('ansible.builtin.file', key_file_path) if (key_file_path is defined and key_file_path | length > 0) else '' }}"
