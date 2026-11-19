@@ -146,10 +146,10 @@ Máy chủ Jenkins đóng vai trò thực thi Pipeline cần có sẵn các côn
 
 2. **Các Plugin cần thiết trong Jenkins:**
    Vào **Manage Jenkins** -> **Plugins** -> **Available plugins** và cài đặt:
-   - **Pipeline** (`workflow-aggregator`)
-   - **Credentials Binding Plugin** (`credentials-binding`)
-   - **SSH Agent Plugin** (`ssh-agent`)
-   - **AnsiColor Plugin** (`ansicolor`)
+   - **Pipeline** (`workflow-aggregator`) - *Bắt buộc*
+   - **Credentials Binding Plugin** (`credentials-binding`) - *Bắt buộc*
+   - **SSH Agent Plugin** (`ssh-agent`) - *Bắt buộc*
+   - **AnsiColor Plugin** (`ansicolor`) - *Tùy chọn (để hiển thị màu logs đẹp hơn)*
 
 ### 4.3. Cấu hình Credentials trong Jenkins
 
