@@ -304,10 +304,10 @@ ssh-keygen -t ed25519 -C "jenkins-ansible-automation" -f ~/.ssh/jenkins_deploy_k
 - File `jenkins_deploy_key.pub`: Dùng nạp vào máy chủ HAProxy.
 
 #### 2.3. Cài đặt Plugin trên Jenkins
-Vào **Manage Jenkins** -> **Plugins** -> **Available plugins**, cài đặt 3 plugin sau:
+Vào **Manage Jenkins** -> **Plugins** -> **Available plugins**, đảm bảo đã cài 2 plugin cơ bản:
 1. **Pipeline** (`workflow-aggregator`)
 2. **Credentials Binding Plugin** (`credentials-binding`)
-3. **SSH Agent Plugin** (`ssh-agent`)
+*(Không cần cài plugin ssh-agent vì Pipeline sử dụng cơ chế `sshUserPrivateKey` chuẩn của Credentials Binding)*
 
 #### 2.4. Khai báo Credentials trong Jenkins
 Vào **Manage Jenkins** -> **Credentials** -> **System** -> **Global credentials (unrestricted)** -> **Add Credentials**:

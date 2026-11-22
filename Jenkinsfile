@@ -162,10 +162,11 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
 
                     echo "Deploying via Ansible: Inventory=${inventoryFile}, Target=${params.TARGET_SERVERS}"
 
-                    sshagent([env.SSH_CREDENTIAL_ID]) {
+                    withCredentials([sshUserPrivateKey(credentialsId: env.SSH_CREDENTIAL_ID, keyFileVariable: 'ANSIBLE_SSH_KEY')]) {
                         sh """
                             ansible-playbook -i ${inventoryFile} playbooks/deploy_certs.yml \
                                 --limit "${params.TARGET_SERVERS}" \
+                                --private-key "\${ANSIBLE_SSH_KEY}" \
                                 --extra-vars "cert_domain=${params.CERT_DOMAIN}" \
                                 --extra-vars "cert_file_path=${TEMP_CERT_DIR}/cert.crt" \
                                 --extra-vars "key_file_path=${TEMP_CERT_DIR}/privkey.key"
