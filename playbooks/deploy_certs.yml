@@ -1,6 +1,6 @@
 ---
 # ==============================================================================
-# Enterprise SSL/TLS Certificate Distribution Playbook
+# Enterprise SSL/TLS Certificate Distribution Playbook (Production HAProxy)
 # Architecture: DevSecOps Zero-Trust & Defense-in-Depth
 # ==============================================================================
 
@@ -16,41 +16,20 @@
   tags:
     - always
 
-- name: "DEPLOY | Distribute SSL/TLS to Nginx Web Servers"
-  hosts: nginx_servers
-  gather_facts: true
-  serial: "50%"  # Rolling update across cluster nodes to preserve high availability
-  roles:
-    - role: nginx_cert
-      tags:
-        - nginx
-        - all
-
 - name: "DEPLOY | Distribute SSL/TLS to HAProxy Load Balancers"
   hosts: haproxy_servers
   gather_facts: true
-  serial: 1      # Reload one LB at a time to prevent any cluster edge drop
+  serial: 1      # Rolling reload: one LB at a time to ensure continuous traffic availability
   roles:
     - role: haproxy_cert
       tags:
         - haproxy
-        - all
-
-- name: "DEPLOY | Distribute SSL/TLS to Kubernetes Clusters via Bastion"
-  hosts: k8s_bastions
-  gather_facts: true
-  roles:
-    - role: k8s_cert
-      tags:
-        - kubernetes
-        - k8s
-        - all
+        - deploy
 
 - name: "VERIFY | Perform Post-Deployment TLS Handshake Verification"
-  hosts: nginx_servers:haproxy_servers
+  hosts: haproxy_servers
   gather_facts: false
   roles:
     - role: verify_cert
       tags:
         - verify
-        - all

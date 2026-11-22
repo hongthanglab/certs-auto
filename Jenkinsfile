@@ -10,13 +10,13 @@ pipeline {
     parameters {
         choice(
             name: 'ENVIRONMENT',
-            choices: ['UAT', 'PROD'],
-            description: 'Target infrastructure environment'
+            choices: ['PROD'],
+            description: 'Target infrastructure environment (PROD default; easily extensible)'
         )
-        choice(
-            name: 'TARGET_PLATFORM',
-            choices: ['ALL', 'KUBERNETES', 'NGINX', 'HAPROXY'],
-            description: 'Select infrastructure target to update'
+        string(
+            name: 'TARGET_SERVERS',
+            defaultValue: 'haproxy_servers',
+            description: 'Target pattern: "haproxy_servers" for all nodes, or specific host/IP (e.g., 10.0.2.3)'
         )
         string(
             name: 'CERT_DOMAIN',
@@ -26,7 +26,7 @@ pipeline {
         choice(
             name: 'ACTION',
             choices: ['DEPLOY', 'VALIDATE_ONLY'],
-            description: 'VALIDATE_ONLY tests Vault fetching and cert validity without modifying hosts'
+            description: 'VALIDATE_ONLY checks cert validity from Vault without modifying servers'
         )
     }
 
@@ -35,8 +35,7 @@ pipeline {
         VAULT_SKIP_VERIFY = 'false'
         ANSIBLE_FORCE_COLOR = 'true'
         SSH_CREDENTIAL_ID = 'ansible-ssh-deploy-key'
-        // Tokens configured as Secret Text in Jenkins Credentials Manager
-        VAULT_TOKEN_CRED_ID = "${params.ENVIRONMENT == 'PROD' ? 'vault-token-prod' : 'vault-token-uat'}"
+        VAULT_TOKEN_CRED_ID = "vault-token-${params.ENVIRONMENT.toLowerCase()}"
         TEMP_CERT_DIR = "${WORKSPACE}/.ephemeral_certs"
     }
 
@@ -47,7 +46,7 @@ pipeline {
                     echo "=========================================================="
                     echo "Starting SSL/TLS Automation Pipeline"
                     echo "Environment     : ${params.ENVIRONMENT}"
-                    echo "Target Platform : ${params.TARGET_PLATFORM}"
+                    echo "Target Servers  : ${params.TARGET_SERVERS}"
                     echo "Cert Domain     : ${params.CERT_DOMAIN}"
                     echo "Action          : ${params.ACTION}"
                     echo "=========================================================="
@@ -63,7 +62,6 @@ pipeline {
                 withCredentials([string(credentialsId: env.VAULT_TOKEN_CRED_ID, variable: 'VAULT_TOKEN')]) {
                     script {
                         echo "Connecting to Vault at ${env.VAULT_ADDR}..."
-                        // Fetching secrets via Vault HTTP API (supports both KV v2 and v1)
                         sh """
                             set +x
                             curl -s -S --fail \
@@ -80,7 +78,6 @@ import json, sys
 with open('${TEMP_CERT_DIR}/vault_response.json') as f:
     data = json.load(f)
 
-# Handle KV v2 ('data' -> 'data') or KV v1 ('data')
 secret_data = data.get('data', {}).get('data', data.get('data', {}))
 
 cert = secret_data.get('tls.crt') or secret_data.get('certificate') or secret_data.get('cert')
@@ -108,7 +105,7 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
         stage('Pre-flight Validation') {
             steps {
                 script {
-                    echo "Executing basic certificate and private key sanity checks..."
+                    echo "Executing certificate and private key sanity checks..."
                     sh """
                         # 1. Check files are non-empty
                         if [ ! -s ${TEMP_CERT_DIR}/cert.crt ]; then
@@ -129,7 +126,7 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
                     """
 
                     if (params.ACTION == 'VALIDATE_ONLY') {
-                        echo "VALIDATE_ONLY selected. Pipeline finished successfully without applying changes."
+                        echo "VALIDATE_ONLY selected. Pipeline finished successfully without modifying servers."
                     }
                 }
             }
@@ -147,7 +144,7 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
                     timeout(time: 1, unit: 'HOURS') {
                         input(
                             id: 'ProceedWithProdDeploy',
-                            message: "CONFIRMATION REQUIRED: Deploy SSL certificate for '${params.CERT_DOMAIN}' to PRODUCTION (${params.TARGET_PLATFORM})?",
+                            message: "CONFIRMATION REQUIRED: Deploy SSL certificate for '${params.CERT_DOMAIN}' to PRODUCTION on '${params.TARGET_SERVERS}'?",
                             ok: 'Approve & Deploy to PROD'
                         )
                     }
@@ -161,31 +158,14 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
             }
             steps {
                 script {
-                    def inventoryFile = (params.ENVIRONMENT == 'PROD') ? 'inventories/prod/hosts.yml' : 'inventories/uat/hosts.yml'
-                    def ansibleTags = ""
+                    def inventoryFile = "inventories/${params.ENVIRONMENT.toLowerCase()}/hosts.yml"
 
-                    switch(params.TARGET_PLATFORM) {
-                        case 'KUBERNETES':
-                            ansibleTags = "kubernetes"
-                            break
-                        case 'NGINX':
-                            ansibleTags = "nginx,verify"
-                            break
-                        case 'HAPROXY':
-                            ansibleTags = "haproxy,verify"
-                            break
-                        default:
-                            ansibleTags = "all"
-                            break
-                    }
-
-                    echo "Deploying via Ansible: Inventory=${inventoryFile}, Tags=${ansibleTags}"
+                    echo "Deploying via Ansible: Inventory=${inventoryFile}, Target=${params.TARGET_SERVERS}"
 
                     sshagent([env.SSH_CREDENTIAL_ID]) {
-                        // Pass paths to files securely; Ansible loads them into memory via lookup plugin
                         sh """
                             ansible-playbook -i ${inventoryFile} playbooks/deploy_certs.yml \
-                                --tags "${ansibleTags}" \
+                                --limit "${params.TARGET_SERVERS}" \
                                 --extra-vars "cert_domain=${params.CERT_DOMAIN}" \
                                 --extra-vars "cert_file_path=${TEMP_CERT_DIR}/cert.crt" \
                                 --extra-vars "key_file_path=${TEMP_CERT_DIR}/privkey.key"
@@ -208,7 +188,7 @@ with open('${TEMP_CERT_DIR}/privkey.key', 'w') as fk:
             }
         }
         success {
-            echo "SUCCESS: Certificate rotation workflow for ${params.CERT_DOMAIN} completed successfully!"
+            echo "SUCCESS: Certificate rotation workflow for ${params.CERT_DOMAIN} on ${params.TARGET_SERVERS} completed successfully!"
         }
         failure {
             echo "FAILURE: Certificate deployment workflow encountered errors. Check logs and rollback status."

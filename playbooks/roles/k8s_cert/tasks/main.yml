@@ -1,6 +1,0 @@
----
-- name: "K8S | Iterate over configured Kubernetes clusters"
-  ansible.builtin.include_tasks: apply_cluster.yml
-  loop: "{{ k8s_clusters }}"
-  loop_control:
-    loop_var: cluster
