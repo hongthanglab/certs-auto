@@ -64,10 +64,10 @@ pipeline {
                         echo "Connecting to Vault at ${env.VAULT_ADDR}..."
                         sh """
                             set +x
-                            curl -s -S --fail \
+                            curl -k -s -S --fail \
                                 --header "X-Vault-Token: \${VAULT_TOKEN}" \
                                 "${env.VAULT_ADDR}/v1/secret/data/certs/${params.CERT_DOMAIN}" > ${TEMP_CERT_DIR}/vault_response.json || \
-                            curl -s -S --fail \
+                            curl -k -s -S --fail \
                                 --header "X-Vault-Token: \${VAULT_TOKEN}" \
                                 "${env.VAULT_ADDR}/v1/secret/certs/${params.CERT_DOMAIN}" > ${TEMP_CERT_DIR}/vault_response.json
 
