@@ -31,7 +31,7 @@ pipeline {
     }
 
     environment {
-        VAULT_ADDR = 'https://vault.internal:8200'
+        VAULT_ADDR = 'https://192.168.1.209:8200'
         VAULT_SKIP_VERIFY = 'false'
         ANSIBLE_FORCE_COLOR = 'true'
         SSH_CREDENTIAL_ID = 'ansible-ssh-deploy-key'

@@ -277,15 +277,7 @@ vault token create \
 > [!IMPORTANT]
 > Cờ `-orphan=true` đảm bảo token của Jenkins không bị thu hồi khi session của người tạo token hết hạn. Copy chuỗi token trả về (bắt đầu bằng `hvs.` hoặc `s.`) để nhập vào Jenkins ở bước sau.
 
-#### 1.4. Nạp chứng chỉ mẫu lên Vault
-Ghép chứng chỉ domain và Intermediate CA thành file Full Chain trước khi nạp:
-```bash
-cat domain.crt intermediate-ca.crt > fullchain.crt
 
-vault kv put secret/certs/example.com \
-    tls.crt=@fullchain.crt \
-    tls.key=@example.com.key
-```
 
 ---
 
@@ -368,7 +360,16 @@ sudo openssl req -x509 -newkey rsa:2048 -nodes \
     -days 1 -subj "/CN=example.com"
 sudo cat /tmp/temp.crt /tmp/temp.key | sudo tee /etc/haproxy/certs/example.com.pem > /dev/null
 sudo chmod 600 /etc/haproxy/certs/example.com.pem
-sudo rm -f /tmp/temp.key /tmp/temp.crt
+sudo mkdir -p haproxy/cert && cd haproxy/cert
+sudo cp /tmp/temp.* .
+```
+
+Nạp chứng chỉ mẫu lên Vault. Ghép chứng chỉ domain và Intermediate CA thành file Full Chain trước khi nạp:
+```bash
+cd cd ~/haproxy/
+vault kv put secret/certs/example.com \
+    tls.crt=@temp.crt \
+    tls.key=@temp.key
 ```
 
 #### 3.3. Cấu hình Frontend SSL trong `/etc/haproxy/haproxy.cfg`
@@ -432,7 +433,7 @@ all:
 2. Tại phần **Pipeline**:
    - **Definition:** `Pipeline script from SCM`.
    - **SCM:** `Git`.
-   - **Repository URL:** Điền Git repo của dự án.
+   - **Repository URL:** [Điền Git repo của dự án.](https://github.com/hongthanglab/certs-auto)
    - **Branch:** `*/main`.
    - **Script Path:** `Jenkinsfile`.
 3. Bấm **Save**.
