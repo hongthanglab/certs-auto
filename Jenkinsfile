@@ -16,11 +16,11 @@ pipeline {
         string(
             name: 'TARGET_SERVERS',
             defaultValue: 'haproxy_servers',
-            description: 'Target pattern: "haproxy_servers" for all nodes, or specific host/IP (e.g., 10.0.2.3)'
+            description: 'Target pattern: "haproxy_servers" for all nodes, or specific host/IP (e.g., haproxy-prod-03.internal)'
         )
         string(
             name: 'CERT_DOMAIN',
-            defaultValue: 'example.com',
+            defaultValue: '*.shs.com.vn',
             description: 'Domain name matching Vault path secret/certs/<CERT_DOMAIN>'
         )
         choice(
