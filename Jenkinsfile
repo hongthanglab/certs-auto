@@ -10,7 +10,7 @@ pipeline {
     parameters {
         choice(
             name: 'ENVIRONMENT',
-            choices: ['PROD'],
+            choices: ['PROD', 'DEV', 'UAT'],
             description: 'Target infrastructure environment (PROD default; easily extensible)'
         )
         string(
